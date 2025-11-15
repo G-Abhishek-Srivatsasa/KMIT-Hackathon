@@ -4,7 +4,7 @@ import RouteMap
 import streamlit as st
 import login_page  # our login system
 from safety_score import safety_score
-
+from sos_activated import display_sos_activated
 # If user isn't logged in yet — show login/signup page first
 
 
@@ -146,7 +146,6 @@ st.sidebar.markdown("<span class='sidebar-label'>Destination</span>", unsafe_all
 destination = st.sidebar.text_input("Destination", "Tellapur, Hyderabad")
 
 mode = st.sidebar.selectbox("Travel Mode", ["Driving", "Walking", "Transit"])
-
 # Action Button
 if st.sidebar.button("🚀 Find Safest Routes"):
     with st.spinner('🛰️ Calculating safest routes...'):
@@ -162,7 +161,9 @@ if st.sidebar.button("🚀 Find Safest Routes"):
             import pandas as pd
             df = pd.DataFrame(route_details)
             st.dataframe(df, use_container_width=True)
-
+sos = st.sidebar.button("SOS ALERT")
+if sos :
+    display_sos_activated()
 # Sidebar Metrics
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Safety Overview")
@@ -226,7 +227,53 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# In RouteMap_Streamlit.py
+def create_3d_map_html(route_polylines, center_lat, center_lng, api_key):
+    # This function would dynamically insert the polylines and API key
+    # into a large HTML/JS string that initializes the Google Map.
+    html_content = f"""
+    <style>#map {{ height: 600px; }}</style>
+    <div id="map"></div>
+    <button onclick="toggle3D()">Toggle 3D View</button>
+    <script>
+        let map;
+        let is3D = false;
+        const CENTER = {{ lat: {center_lat}, lng: {center_lng} }};
+        const routes = {route_polylines}; // Decoded points for polylines
 
+        function initMap() {{
+            map = new google.maps.Map(document.getElementById('map'), {{
+                center: CENTER,
+                zoom: 12,
+                mapId: 'YOUR_MAP_ID', // Optional: for custom styling
+            }});
+
+            // Draw all polylines
+            routes.forEach(route => {{
+                new google.maps.Polyline({{
+                    path: route,
+                    map: map,
+                    strokeColor: '#FF0000', // Set a color
+                    strokeWeight: 5
+                }});
+            }});
+        }}
+
+        function toggle3D() {{
+            is3D = !is3D;
+            map.setTilt(is3D ? 45 : 0);
+            map.setHeading(is3D ? 45 : 0);
+        }}
+    </script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key={api_key}&callback=initMap"></script>
+    """
+    return html_content
+
+# Inside the main logic of RouteMap_Streamlit.py
+# ...
+# Call RouteMap.generate_route_with_traffic_and_restaurants to get data
+# html_content = create_3d_map_html(polylines_data, mid_lat, mid_lng, RouteMap.API_KEY)
+# st.components.v1.html(html_content, height=650)
 
 
 # ---------- FEATURE CARDS ----------
