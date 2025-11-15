@@ -53,14 +53,73 @@ def find_restaurants_along_route(origin, destination, radius=1500, max_results=5
             break
             
     return all_restaurants
+import folium
+import webbrowser
+from datetime import datetime
 
+# Example: Data structure to hold route condition info
+route_conditions = [
+    {"lat": 17.412, "lng": 78.128, "type": "damaged", "desc": "Road damaged due to potholes"},
+    {"lat": 17.415, "lng": 78.132, "type": "construction", "desc": "Construction work: single lane traffic"},
+    # Add more entries as you need with lat/lng and info
+]
+
+def add_route_condition_markers(map_obj, route_conditions):
+    for cond in route_conditions:
+        if cond["type"] == "damaged":
+            color = 'red'
+            icon = 'exclamation-triangle'
+        elif cond["type"] == "construction":
+            color = 'orange'
+            icon = 'wrench'
+        else:
+            color = 'gray'
+            icon = 'info-sign'
+        folium.Marker(
+            location=[cond["lat"], cond["lng"]],
+            popup=f"<b>{cond['type'].capitalize()}</b><br>{cond['desc']}",
+            icon=folium.Icon(color=color, icon=icon, prefix='fa')
+        ).add_to(map_obj)
+
+def generateroutewithconditions(origin, destination, route_conditions, gmaps):
+    directions_result = gmaps.directions(origin, destination, mode="driving", departure_time=datetime.now(), alternatives=True)
+    geocode_origin = gmaps.geocode(origin)[0]["geometry"]["location"]
+    geocode_dest = gmaps.geocode(destination)[0]["geometry"]["location"]
+    midlat = (geocode_origin["lat"] + geocode_dest["lat"]) / 2
+    midlng = (geocode_origin["lng"] + geocode_dest["lng"]) / 2
+    map_route = folium.Map(location=[midlat, midlng], zoom_start=12)
+
+    # Polyline drawing (route)
+    steps = directions_result[0]['legs'][0]['steps']
+    route_points = []
+    for step in steps:
+        lat = step['start_location']['lat']
+        lng = step['start_location']['lng']
+        route_points.append([lat, lng])
+    folium.PolyLine(route_points, color="blue", weight=4.5, opacity=0.7).add_to(map_route)
+
+    # Add condition markers
+    add_route_condition_markers(map_route, route_conditions)
+
+    map_file = "routemap_with_conditions.html"
+    map_route.save(map_file)
+    webbrowser.open(map_file)
+
+# Paste this at the main entry:
+if __name__ == "_main_":
+    import googlemaps  # Import inside main for copy-paste use
+    API_KEY = 'YOUR-API-KEY-HERE'
+    gmaps = googlemaps.Client(key=API_KEY)
+    origin = input("Enter your start location: ")
+    destination = input("Enter your destination: ")
+    generateroutewithconditions(origin, destination, route_conditions, gmaps)
 # ----------------------------------------------------------------------
 # NEW FUNCTION - Includes Traffic and Restaurants
 # ----------------------------------------------------------------------
 def generate_route_with_traffic_and_restaurants(origin, destination, openmap=True):
     """
     Generates a Folium map showing the routes (with traffic-aware duration in tooltips) 
-    and restaurant markers.
+    and restaurant markers, including distinct Origin and Destination markers.
     """
     # Request directions, ensuring departure_time is set to get 'duration_in_traffic'
     directions_result = gmaps.directions(
@@ -75,7 +134,7 @@ def generate_route_with_traffic_and_restaurants(origin, destination, openmap=Tru
         print("No route found.")
         return None, [], []
 
-    # Get center point for the map
+    # Get geocoded location data for O & D
     geocode_origin = gmaps.geocode(origin)[0]['geometry']['location']
     geocode_dest = gmaps.geocode(destination)[0]['geometry']['location']
     mid_lat = (geocode_origin['lat'] + geocode_dest['lat'])/2
@@ -83,6 +142,23 @@ def generate_route_with_traffic_and_restaurants(origin, destination, openmap=Tru
     
     # Create the base map
     maproute = folium.Map(location=[mid_lat, mid_lng], zoom_start=12)
+
+    # --- ADDED: Origin and Destination Markers ---
+    # Origin Marker
+    folium.Marker(
+        [geocode_origin['lat'], geocode_origin['lng']],
+        popup=f"<b>Origin:</b> {origin}",
+        icon=folium.Icon(color='darkblue', icon='circle', prefix='fa') 
+    ).add_to(maproute)
+
+    # Destination Marker
+    folium.Marker(
+        [geocode_dest['lat'], geocode_dest['lng']],
+        popup=f"<b>Destination:</b> {destination}",
+        icon=folium.Icon(color='darkred', icon='flag', prefix='fa') 
+    ).add_to(maproute)
+    # ----------------------------------------------
+
 
     colors = ["red", "blue", "green"]
     route_details = []
@@ -153,15 +229,20 @@ def generate_route(origin, destination, open_map=True):
     map_file, route_details, restaurants = generate_route_with_traffic_and_restaurants(origin, destination, open_map)
     
     # Filter details to match the original function's expected return (no restaurant list)
+    # The gmaps.directions call is repeated here just to access the full route object 
+    # to maintain the minimal_route_details structure used by the Streamlit app.
+    full_directions = gmaps.directions(origin, destination, mode="driving", departure_time=datetime.now(), alternatives=True)
+    
     minimal_route_details = [
         {
             "route": d["route"],
             "distance_text": d["distance_text"],
             "duration_text": d["duration_in_traffic_text"], # Use traffic duration here
-            "distance_value": route["legs"][0]["distance"]["value"],
+            # The 'distance_value' and 'duration_value' need to come from the full directions object
+            "distance_value": full_directions[i]["legs"][0]["distance"]["value"],
             "duration_value": d["duration_in_traffic_value"], # Use traffic duration value here
         }
-        for d, route in zip(route_details, gmaps.directions(origin, destination, mode="driving", departure_time=datetime.now(), alternatives=True))
+        for i, d in enumerate(route_details)
     ]
     return map_file, minimal_route_details
 
